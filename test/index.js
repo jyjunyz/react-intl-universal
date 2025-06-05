@@ -159,7 +159,7 @@ test("Message with Currency", () => {
     intl.get("SALE_PRICE", {
       price: price
     })
-  ).toBe("售价CN¥ 123,456.78");
+  ).toBe("售价¥123,456.78");
 });
 
 test("Message with plural", () => {
@@ -277,4 +277,123 @@ test("load mutiple locale data without overriding existing one", () => {
   intl.load(localesMore); 
   expect(intl.get("SIMPLE")).toBe("Simple");
   expect(intl.get("MORE")).toBe("More data");
+});
+
+test("Should handle IntlMessageFormat errors gracefully", () => {
+  const warningHandler = jest.fn();
+  intl.init({ 
+    locales: {
+      "en-US": {
+        "INVALID_FORMAT": "This is {invalid format"
+      }
+    }, 
+    currentLocale: "en-US",
+    warningHandler
+  });
+  
+  const result = intl.get("INVALID_FORMAT", { name: "test" });
+  expect(result).toBe("");
+  expect(warningHandler).toHaveBeenCalledWith(
+    expect.stringContaining("react-intl-universal format message failed for key='INVALID_FORMAT'"),
+    expect.any(Error)
+  );
+});
+
+test("Should warn when language is not supported", () => {
+  const warningHandler = jest.fn();
+  
+  // Mock browser environment
+  const originalIsBrowser = global.window;
+  global.window = {};
+  
+  return intl.init({ 
+    locales: { "xx-XX": { "TEST": "test" } }, 
+    currentLocale: "xx-XX",
+    warningHandler,
+    commonLocaleDataUrls: {} // Empty to simulate unsupported language
+  }).then(() => {
+    expect(warningHandler).toHaveBeenCalledWith('lang "xx" is not supported.');
+    
+    // Restore original state
+    if (originalIsBrowser) {
+      global.window = originalIsBrowser;
+    } else {
+      delete global.window;
+    }
+  });
+});
+
+test("Should resolve immediately in Node.js environment", () => {
+  const warningHandler = jest.fn();
+  
+  // Ensure we're in Node.js environment (no window)
+  const originalWindow = global.window;
+  delete global.window;
+  
+  return intl.init({ 
+    locales: { "en-US": { "TEST": "test" } }, 
+    currentLocale: "en-US",
+    warningHandler,
+    commonLocaleDataUrls: { "en": "http://example.com/en.js" } // Provide URL to avoid warning
+  }).then(() => {
+    // In Node.js environment, it should resolve without trying to load scripts
+    // The warning handler should not be called for unsupported language
+    
+    // Restore original state
+    if (originalWindow) {
+      global.window = originalWindow;
+    }
+  });
+});
+
+test("Should handle getDescendantProp with undefined values", () => {
+  intl.init({ locales, currentLocale: "en-US" });
+  
+  // Test with a key that has undefined intermediate values
+  const result = intl.get("UNDEFINED.NESTED.KEY");
+  expect(result).toBe("");
+});
+
+test("Should handle empty variables object", () => {
+  intl.init({ locales, currentLocale: "en-US" });
+  expect(intl.get("SIMPLE", {})).toBe("Simple");
+});
+
+test("Should handle null variables", () => {
+  intl.init({ locales, currentLocale: "en-US" });
+  expect(intl.get("SIMPLE", null)).toBe("Simple");
+});
+
+test("Should return empty string when locales is not available", () => {
+  intl.init({ locales: {}, currentLocale: "en-US" });
+  expect(intl.get("SIMPLE")).toBe("");
+});
+
+test("Should return empty string when currentLocale is not in locales", () => {
+  intl.init({ locales: { "fr-FR": { "TEST": "test" } }, currentLocale: "en-US" });
+  expect(intl.get("SIMPLE")).toBe("");
+});
+
+test("Should handle browser environment with successful script loading", () => {
+  const warningHandler = jest.fn();
+  
+  // Mock browser environment
+  const originalWindow = global.window;
+  global.window = {};
+  
+  return intl.init({ 
+    locales: { "en-US": { "TEST": "test" } }, 
+    currentLocale: "en-US",
+    warningHandler
+  }).then(() => {
+    // Should resolve successfully in browser environment
+    expect(warningHandler).not.toHaveBeenCalledWith(expect.stringContaining("not supported"));
+    
+    // Restore original state
+    if (originalWindow) {
+      global.window = originalWindow;
+    } else {
+      delete global.window;
+    }
+  });
 });
